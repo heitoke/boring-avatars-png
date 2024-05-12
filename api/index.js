@@ -1,6 +1,7 @@
 const React = require("react");
 const { renderToString } = require("react-dom/server");
 const Avatar = require("boring-avatars").default;
+const sharp = require("sharp");
 
 const DEFAULT_COLORS = [
   "#92A1C6",
@@ -37,18 +38,19 @@ app.get("/favicon.ico", (req, res) => {
   res.sendStatus(204);
 });
 
-app.get("/:variant?/:size?/:name?", (req, res) => {
+app.get("/:variant?/:size?/:name?", async (req, res) => {
   const { variant = DEFAULT_VARIANT, size = DEFAULT_SIZE } = req.params;
   const explicitName = req.query.name || req.params.name;
   const name = explicitName || Math.random().toString();
   const colors = normalizeColors(req.query.colors || DEFAULT_COLORS);
   const square = req.query.hasOwnProperty("square");
+  const isConvertToPng = req.query.hasOwnProperty("png");
 
   if (!VALID_VARIANTS.has(variant)) {
     return res.status(400).send("Invalid variant");
   }
 
-  res.setHeader("Content-Type", "image/svg+xml");
+  res.setHeader("Content-Type", `image/${isConvertToPng ? 'png' : 'svg+xml'}`);
 
   if (explicitName) {
     res.setHeader("Cache-Control", "max-age=0, s-maxage=2592000");
@@ -70,7 +72,16 @@ app.get("/:variant?/:size?/:name?", (req, res) => {
     )
   );
 
-  res.end(svg);
+  if (isConvertToPng) {
+    const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
+    
+    const img = Buffer.from(pngBuffer, 'base64');
+    res.setHeader('Content-Length', img.length);
+  
+    res.end(img);
+  } else {
+    res.end(svg);
+  }
 });
 
 const port = process.env.PORT || 3000;
